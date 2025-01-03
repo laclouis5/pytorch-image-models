@@ -19,12 +19,12 @@ Hacked together by / Copyright 2021 Ross Wightman
 from typing import List
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 from .helpers import make_divisible
-from .weight_init import trunc_normal_
 from .trace_utils import _assert
+from .weight_init import trunc_normal_
 
 
 def rel_logits_1d(q, rel_k, permute_mask: List[int]):
@@ -179,6 +179,7 @@ class HaloAttn(nn.Module):
         q = q.reshape(
             -1, self.dim_head_qk,
             num_h_blocks, self.block_size_ds, num_w_blocks, self.block_size_ds).permute(0, 1, 3, 5, 2, 4)
+        
         # B, num_heads * dim_head * block_size ** 2, num_blocks
         q = q.reshape(B * self.num_heads, self.dim_head_qk, -1, num_blocks).transpose(1, 3)
         # B * num_heads, num_blocks, block_size ** 2, dim_head
@@ -187,6 +188,7 @@ class HaloAttn(nn.Module):
         # Generate overlapping windows for kv. This approach is good for GPU and CPU. However, unfold() is not
         # lowered for PyTorch XLA so it will be very slow. See code at bottom of file for XLA friendly approach.
         # FIXME figure out how to switch impl between this and conv2d if XLA being used.
+        # FIXME: Wrong reshape order. Move after the splitting.
         kv = F.pad(kv, [self.halo_size, self.halo_size, self.halo_size, self.halo_size])
         kv = kv.unfold(2, self.win_size, self.block_size).unfold(3, self.win_size, self.block_size).reshape(
             B * self.num_heads, self.dim_head_qk + self.dim_head_v, num_blocks, -1).permute(0, 2, 3, 1)
